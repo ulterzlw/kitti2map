@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
   int line_num = 0;
 
   pcl::VoxelGrid<pcl::PointXYZI> sor;
-  sor.setLeafSize(.8,.8,.8);
+  sor.setLeafSize(.5,.5,.5);
   pcl::PointCloud<pcl::PointXYZI> filtered;
 
   pcl::PointCloud<pcl::PointXYZI>::Ptr map(new pcl::PointCloud<pcl::PointXYZI>);
@@ -99,7 +99,7 @@ int main(int argc, char **argv) {
     *map += filtered;
 
     std::cout<<line_num++<<std::endl;
-    if (line_num > 4543) {
+    if (line_num > 4540) {
       break;
     }
   }
@@ -107,5 +107,6 @@ int main(int argc, char **argv) {
   sor.filter(filtered);
   *map = filtered;
 
+  pcl::transformPointCloud(*map, *map, t_cam_velo.inverse().cast<float>());
   pcl::io::savePCDFile("map.pcd", *map);
 }
