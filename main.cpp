@@ -1,6 +1,6 @@
 #include <pcl/common/transforms.h>
-#include <pcl/io/pcd_io.h>
 #include <pcl/filters/voxel_grid.h>
+#include <pcl/io/pcd_io.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <Eigen/Core>
@@ -11,8 +11,12 @@
 #include <vector>
 
 int main(int argc, char **argv) {
-  std::string kitti_path = "/mnt/SuperDisk/Data/kitti/data_odometry_velodyne";
-  std::string sequence = "00";
+  if (argc != 3) {
+    std::cout << "usage: kitti2map $PATH_TO_DATASET SEQUENCE" << std::endl;
+    return -1;
+  }
+  std::string kitti_path = argv[1];
+  std::string sequence = argv[2];
   std::string data_path = kitti_path + "/sequences/" + sequence;
   std::string velodyne_path = data_path + "/velodyne";
   std::string calibration_file = data_path + "/calib.txt";
@@ -44,10 +48,6 @@ int main(int argc, char **argv) {
 
   int line_num = 0;
 
-  pcl::VoxelGrid<pcl::PointXYZI> sor;
-  sor.setLeafSize(.5,.5,.5);
-  pcl::PointCloud<pcl::PointXYZI> filtered;
-
   pcl::PointCloud<pcl::PointXYZI>::Ptr map(new pcl::PointCloud<pcl::PointXYZI>);
   while (std::getline(time_fin, value)) {
     std::stringstream velo_ss;
@@ -66,8 +66,8 @@ int main(int argc, char **argv) {
     stream = fopen(velo_ss.str().c_str(), "rb");
     num = fread(data, sizeof(float), num, stream) / 4;
 
-
-    pcl::PointCloud<pcl::PointXYZI>::Ptr point_cloud(new pcl::PointCloud<pcl::PointXYZI>);
+    pcl::PointCloud<pcl::PointXYZI>::Ptr point_cloud(
+        new pcl::PointCloud<pcl::PointXYZI>);
     for (int32_t i = 0; i < num; i++) {
       pcl::PointXYZI point_xyzi;
       point_xyzi.x = *px;
@@ -81,6 +81,7 @@ int main(int argc, char **argv) {
       pr += 4;
     }
     fclose(stream);
+    delete data;
 
     for (int i = 0; i < 11; i++) {
       std::getline(pose_fin, value, ' ');
@@ -90,23 +91,31 @@ int main(int argc, char **argv) {
     matrix_in(11) = stof(value);
     Eigen::Matrix4d pose_cam(Eigen::Matrix4d::Identity());
     pose_cam.block<3, 4>(0, 0) = matrix_in.transpose();
-    //    std::cout<<pose_cam<<std::endl;
     Eigen::Matrix4d pose_velo = pose_cam * t_cam_velo;
     pcl::transformPointCloud(*point_cloud, *point_cloud, pose_velo);
 
+    pcl::VoxelGrid<pcl::PointXYZI> sor;
+    sor.setLeafSize(.5, .5, .5);
+    pcl::PointCloud<pcl::PointXYZI> filtered;
     sor.setInputCloud(point_cloud);
     sor.filter(filtered);
     *map += filtered;
-
-    std::cout<<line_num++<<std::endl;
-    if (line_num > 4540) {
-      break;
+    if (line_num % 100 == 1) {
+      sor.setInputCloud(map);
+      sor.filter(filtered);
+      *map = filtered;
     }
+    std::cout << line_num++ << '\r' << std::flush;
   }
+  std::cout<<std::endl;
+  pcl::VoxelGrid<pcl::PointXYZI> sor;
+  sor.setLeafSize(.5, .5, .5);
+  pcl::PointCloud<pcl::PointXYZI> filtered;
   sor.setInputCloud(map);
   sor.filter(filtered);
   *map = filtered;
 
   pcl::transformPointCloud(*map, *map, t_cam_velo.inverse().cast<float>());
   pcl::io::savePCDFile("map.pcd", *map);
+  return 0;
 }
